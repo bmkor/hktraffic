@@ -1,4 +1,4 @@
 require(leaflet)
 
-# leaflet() %>% addTiles() %>%
-#   addPolylines(data=roads,popup=~route)
+leaflet() %>% addTiles() %>%
+  addPolylines(data=roads,popup=~route)
