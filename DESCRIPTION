@@ -3,9 +3,9 @@ Type: Package
 Title: Display HK Traffic Data
 Version: 0.1.0
 Author: bmkor
-Maintainer: The package maintainer <orbenappdev@gmail.com>
+Maintainer: Benjamin Or <orbenappdev@gmail.com>
 Description: Dispaly HK Traffic Data from data.gov.hk on a map via leaflet.
-License: What license is it under?
+License: GPL-2
 Encoding: UTF-8
 LazyData: true
-Imports: leaflet, sp
+Imports: leaflet, sp, XML

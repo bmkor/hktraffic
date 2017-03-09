@@ -1,2 +1,4 @@
 exportPattern("^[[:alpha:]]+")
-export(roads)
+export(getRoads)
+export(plotRoads)
+export(plotCurrentTraffic)
