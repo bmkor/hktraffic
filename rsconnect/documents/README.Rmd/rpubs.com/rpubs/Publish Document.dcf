@@ -1,0 +1,8 @@
+name: Publish Document
+title:
+account: rpubs
+server: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/257811/db4c64e78b794306ba67659a88623af3
+bundleId: https://api.rpubs.com/api/v1/document/257811/db4c64e78b794306ba67659a88623af3
+url: http://rpubs.com/tinybear/257811
+when: 1489299792.69667

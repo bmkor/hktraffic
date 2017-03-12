@@ -1,0 +1,140 @@
+# Display Hong Kong Traffic Data
+
+In this small exercise, we'll try to parse the real-time traffic speed data on 6 hundred-something links(or roads) in Hong Kong, covering Tuen Mum (TM), Shatin (ST), Kowloon (K) and Hong Kong island (HK) and display the data on the OpenStreetMap by package `leaflet`. Each link is either belonged to Major Route (speed limit >= 70 km/h) or Urban Road (speed limit = 50 km/h)
+
+>Disclaimer
+>
+>This exercise contains information that is copied or extracted from data made available by the Government of Hong Kong Special Administrative Region (the "Government") at <https://DATA.GOV.HK/> ("DATA.GOV.HK"). The provision of information copied or extracted from or a link to DATA.GOV.HK at this website or in relation to the product or service shall not constitute any form of co-operation or affiliation by the Government with any person in relation to this website, the product or the service or any contents herein. Nothing in this website, the product or the service shall give rise to any representation, warranty or implication that the Government agrees with, approves of, recommends or endorses any contents of this website or the product or the service. The Government does not have any liability, obligation or responsibility whatsoever for any loss, destruction or damage (including without limitation consequential loss, destruction or damage) howsoever arising from or in respect of your use or misuse of or reliance on or inability to use any contents herein.
+
+##1. Grep and parse the specificaton of the links(or roads) in Hong Kong Traffic Data
+
+The real-time traffic speed data can be downloaded through this link <http://resource.data.one.gov.hk/td/speedmap.xml>. And the specification of the link can be downloaded via this link <http://www.gov.hk/en/theme/psi/datasets/tsm_dataspec.pdf>.
+
+We first build a function parsing the specification pdf and return to a `SpatialLinesDataFrame`. Note that the coordinates in the pdf are in HK1980Grid which corresponds to `epsg:2326`.
+
+```{r parse pdf}
+require(pdftools)
+require(sp)
+
+getRoads<-function(specURL="http://theme.gov.hk/en/theme/psi/datasets/tsm_dataspec.pdf"){
+  tmp<-tempfile()
+  roadMetaData<-specURL
+  download.file(roadMetaData,dest=tmp,quiet =T)
+
+  roadMetaData<-pdftools::pdf_text(tmp)
+  roadMetaData<-roadMetaData[-1]
+
+  res<-sapply(roadMetaData, function(x){
+    stmp<-unlist(strsplit(x,"\\n"))[-(1:2)]
+    gsub("^\\s","",gsub(" ROAD", "_ROAD",gsub(" ROUTE", "_ROUTE",gsub("\\s+"," ",stmp))))
+  })
+  names(res)<-1:length(res)
+  res<-c(paste("route","start","start_E","start_N","end","end_E","end_N","district","route_type",sep=" "),as.vector(unlist(res)))
+  write(res,tmp)
+  roadMetaData<-read.csv(tmp,sep=" ",stringsAsFactors = TRUE)
+  rownames(roadMetaData) <- roadMetaData$route
+
+  if(require("sp",character.only = T, quietly = T)){
+    roads<-apply(roadMetaData,1,function(r){
+      m<-matrix(as.numeric(c(r[3],r[4],
+                             r[6],r[7])), nrow = 2, byrow =T)
+      m<-data.frame(m)
+      sp::coordinates(m) <- ~X1+X2
+      sp::SpatialLines(list(sp::Lines(list(sp::Line(m)), r[1])),sp::CRS("+init=epsg:2326"))
+    })
+    roads<-do.call(rbind,roads)
+    roads<-sp::SpatialLinesDataFrame(roads,roadMetaData[,c("route","district","route_type")])
+    roads<-sp::spTransform(roads,sp::CRS("+init=epsg:4326"))
+    roads
+  }else{
+    NA
+  }
+}
+
+summary(getRoads())
+```
+
+Note that more links are of Major route type and Shatin got the highest number of roads/links.
+
+##2. Plotting the roads out
+
+We try to plot out those links/roads by `leaflet`. 
+
+```{r plot the roads, echo=TRUE}
+require(leaflet)
+
+plotRoads<-function(roads=getRoads()){
+  if(require("leaflet",character.only = T,quietly =T)){
+    roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$route_type)])
+    pale<-c("yellow","orange","blue","brown")
+    dPal<-leaflet::colorFactor(pale,domain=roads$district)
+    leaflet(data=roads) %>%
+      addTiles(group = "OSM (default)") %>%
+      addProviderTiles(providers$Stamen.Toner, group = "Toner") %>%
+      addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
+      addPolylines(color=~dPal(district),dashArray=~dashPattern,
+                   popup=~paste0("route type: ",route_type), label = ~route) %>%
+      addLegend(position="bottomright", pal = dPal,
+                values = ~district, title = "District",
+                labels=~district) %>%
+      addLayersControl(
+        baseGroups = c("OSM (default)", "Toner", "Toner Lite"),
+        options = layersControlOptions(collapsed = FALSE)
+      )
+  }
+}
+
+plotRoads()
+````
+Note that the roads/links are straight lines which are not realistic and Urban Roads are in dashed lines.
+
+##3. Plotting the current HK Traffic
+
+Finally, we get the real-time traffic data (in XML format) through the link <http://resource.data.one.gov.hk/td/speedmap.xml> and highlight the Spatial lines (or roads or links) for the traffic satuartion and etc.
+
+````{r plot current traffic, echo=TRUE}
+require(XML)
+plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/speedmap.xml"){
+  if(require("leaflet",character.only = T,quietly =T) & require("XML",character.only = T,quietly =T)){
+    tdata<-XML::xmlParse(trafficURL)
+    tdata<-XML::xmlToDataFrame(tdata, stringsAsFactors = F)
+    tdata$ROAD_SATURATION_LEVEL<-gsub("TRAFFIC ","",tdata$ROAD_SATURATION_LEVEL)
+    tdata$ROAD_SATURATION_LEVEL <- factor(tdata$ROAD_SATURATION_LEVEL)
+    tdata$CAPTURE_DATE<-strptime(tdata$CAPTURE_DATE,format="%Y-%m-%dT%H:%M:%S")
+
+    pale<-c("green","yellow","red")
+    names(pale)<-c("GOOD","AVERAGE","BAD")
+    pale<-as.vector(pale[levels(tdata$ROAD_SATURATION_LEVEL)])
+
+    pal<-leaflet::colorFactor(pale,domain=tdata$ROAD_SATURATION_LEVEL)
+    roads=getRoads()
+    roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$route_type)])
+    roads<-subset(roads, route %in% tdata$LINK_ID)
+    roads@data<-cbind(roads@data,tdata[match(roads$route,tdata$LINK_ID),])
+    lastCaptureTime<-max(unique(tdata$CAPTURE_DATE))
+    lastCaptureTime<-strftime(lastCaptureTime,format="%H:%M, %d %b %Y")
+    leaflet(data=roads) %>%
+      addTiles(group = "OSM (default)") %>%
+      addProviderTiles(providers$Stamen.Toner, group = "Toner") %>%
+      addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
+      addPolylines(color=~pal(ROAD_SATURATION_LEVEL),dashArray=~dashPattern,
+                   popup=~paste0("average speed: ",TRAFFIC_SPEED, " km/h"), label = ~route) %>%
+      addLegend(position="bottomright", pal = pal,
+                values = ~ROAD_SATURATION_LEVEL, title = paste0("Road Saturation Level at ",lastCaptureTime),
+                labels=~ROAD_SATURATION_LEVEL) %>%
+      addLayersControl(
+        baseGroups = c("OSM (default)", "Toner", "Toner Lite"),
+        options = layersControlOptions(collapsed = FALSE)
+      )  }
+}
+
+plotCurrentTraffic()
+````
+
+Note that the time stamp is the latest time.
+
+##4.(Optional) Download from github
+
+If you need the above functions for whatever reasons, you may just install this package hktraffic from my github.
+`devtools::install_github("bmkor/hktraffic")`
+

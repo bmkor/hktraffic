@@ -14,7 +14,8 @@ plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/spee
     roads=getRoads()
     roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$route_type)])
     roads<-subset(roads, route %in% tdata$LINK_ID)
-    roads@data<-cbind(roads@data,tdata[match(roads$route,data$LINK_ID),])
+    roads@data<-cbind(roads@data,tdata[match(roads$route,tdata$LINK_ID),])
+
     lastCaptureTime<-max(unique(tdata$CAPTURE_DATE))
     lastCaptureTime<-strftime(lastCaptureTime,format="%H:%M, %d %b")
     leaflet(data=roads) %>%
@@ -31,3 +32,5 @@ plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/spee
         options = layersControlOptions(collapsed = FALSE)
       )  }
 }
+
+plotCurrentTraffic()
