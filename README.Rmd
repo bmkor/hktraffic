@@ -8,7 +8,7 @@ In this small exercise, we'll try to parse the real-time traffic speed data on 6
 
 ##1. Grep and parse the specificaton of the links(or roads) in Hong Kong Traffic Data
 
-The real-time traffic speed data can be downloaded through this link <http://resource.data.one.gov.hk/td/speedmap.xml>. And the specification of the link can be downloaded via this link <http://www.gov.hk/en/theme/psi/datasets/tsm_dataspec.pdf>.
+The real-time traffic speed data can be downloaded through this link <http://resource.data.one.gov.hk/td/speedmap.xml>. And the specification of the link can be downloaded via this link <http://static.data.gov.hk/td/traffic-speed-map/en/tsm_dataspec.pdf>.
 
 We first build a function parsing the specification pdf and return to a `SpatialLinesDataFrame`. Note that the coordinates in the pdf are in HK1980Grid which corresponds to `epsg:2326`.
 
@@ -16,7 +16,7 @@ We first build a function parsing the specification pdf and return to a `Spatial
 require(pdftools)
 require(sp)
 
-getRoads<-function(specURL="http://theme.gov.hk/en/theme/psi/datasets/tsm_dataspec.pdf"){
+getRoads<-function(specURL="http://static.data.gov.hk/td/traffic-speed-map/en/tsm_dataspec.pdf"){
   tmp<-tempfile()
   roadMetaData<-specURL
   download.file(roadMetaData,dest=tmp,quiet =T)
