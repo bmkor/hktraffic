@@ -12,7 +12,7 @@ The real-time traffic speed data can be downloaded through this link <http://res
 
 We first build a function parsing the specification pdf and return to a `SpatialLinesDataFrame`. Note that the coordinates in the pdf are in HK1980Grid which corresponds to `epsg:2326`.
 
-```{r parse pdf}
+```{r parse pdf, echo = TRUE, message = FALSE, warning = FALSE}
 require(pdftools)
 require(sp)
 
@@ -29,10 +29,10 @@ getRoads<-function(specURL="http://static.data.gov.hk/td/traffic-speed-map/en/ts
     gsub("^\\s","",gsub(" ROAD", "_ROAD",gsub(" ROUTE", "_ROUTE",gsub("\\s+"," ",stmp))))
   })
   names(res)<-1:length(res)
-  res<-c(paste("route","start","start_E","start_N","end","end_E","end_N","district","route_type",sep=" "),as.vector(unlist(res)))
+  res<-c(paste("ROUTE","START","START_E","START_N","END","END_E","END_N","DISTRICT","ROUTE_TYPE",sep=" "),as.vector(unlist(res)))
   write(res,tmp)
   roadMetaData<-read.csv(tmp,sep=" ",stringsAsFactors = TRUE)
-  rownames(roadMetaData) <- roadMetaData$route
+  rownames(roadMetaData) <- roadMetaData$ROUTE
 
   if(require("sp",character.only = T, quietly = T)){
     roads<-apply(roadMetaData,1,function(r){
@@ -43,7 +43,7 @@ getRoads<-function(specURL="http://static.data.gov.hk/td/traffic-speed-map/en/ts
       sp::SpatialLines(list(sp::Lines(list(sp::Line(m)), r[1])),sp::CRS("+init=epsg:2326"))
     })
     roads<-do.call(rbind,roads)
-    roads<-sp::SpatialLinesDataFrame(roads,roadMetaData[,c("route","district","route_type")])
+    roads<-sp::SpatialLinesDataFrame(roads,roadMetaData[,c("ROUTE","DISTRICT","ROUTE_TYPE")])
     roads<-sp::spTransform(roads,sp::CRS("+init=epsg:4326"))
     roads
   }else{
@@ -60,23 +60,23 @@ Note that more links are of Major route type and Shatin got the highest number o
 
 We try to plot out those links/roads by `leaflet`. 
 
-```{r plot the roads, echo=TRUE}
+```{r plot the roads, echo=TRUE, message = FALSE, warning = FALSE}
 require(leaflet)
 
 plotRoads<-function(roads=getRoads()){
   if(require("leaflet",character.only = T,quietly =T)){
-    roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$route_type)])
+    roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$ROUTE_TYPE)])
     pale<-c("yellow","orange","blue","brown")
-    dPal<-leaflet::colorFactor(pale,domain=roads$district)
+    dPal<-leaflet::colorFactor(pale,domain=roads$DISTRICT)
     leaflet(data=roads) %>%
       addTiles(group = "OSM (default)") %>%
       addProviderTiles(providers$Stamen.Toner, group = "Toner") %>%
       addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
-      addPolylines(color=~dPal(district),dashArray=~dashPattern,
-                   popup=~paste0("route type: ",route_type), label = ~route) %>%
+      addPolylines(color=~dPal(DISTRICT),dashArray=~dashPattern,
+                   popup=~paste0("route type: ",ROUTE_TYPE), label = ~ROUTE) %>%
       addLegend(position="bottomright", pal = dPal,
-                values = ~district, title = "District",
-                labels=~district) %>%
+                values = ~DISTRICT, title = "District",
+                labels=~DISTRICT) %>%
       addLayersControl(
         baseGroups = c("OSM (default)", "Toner", "Toner Lite"),
         options = layersControlOptions(collapsed = FALSE)
@@ -92,9 +92,9 @@ Note that the roads/links are straight lines which are not realistic and Urban R
 
 Finally, we get the real-time traffic data (in XML format) through the link <http://resource.data.one.gov.hk/td/speedmap.xml> and highlight the Spatial lines (or roads or links) for the traffic satuartion and etc.
 
-````{r plot current traffic, echo=TRUE}
+````{r plot current traffic, echo=TRUE, message = FALSE, warning = FALSE}
 require(XML)
-plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/speedmap.xml"){
+plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/speedmap.xml", roads=getRoads()){
   if(require("leaflet",character.only = T,quietly =T) & require("XML",character.only = T,quietly =T)){
     tdata<-XML::xmlParse(trafficURL)
     tdata<-XML::xmlToDataFrame(tdata, stringsAsFactors = F)
@@ -107,10 +107,11 @@ plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/spee
     pale<-as.vector(pale[levels(tdata$ROAD_SATURATION_LEVEL)])
 
     pal<-leaflet::colorFactor(pale,domain=tdata$ROAD_SATURATION_LEVEL)
-    roads=getRoads()
-    roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$route_type)])
-    roads<-subset(roads, route %in% tdata$LINK_ID)
-    roads@data<-cbind(roads@data,tdata[match(roads$route,tdata$LINK_ID),])
+    
+    roads$dashPattern<-as.character(c(1,c("15, 10, 5"))[as.numeric(roads$ROUTE_TYPE)])
+    roads<-subset(roads, ROUTE %in% tdata$LINK_ID)
+    roads@data<-cbind(ROUTE=roads$ROUTE,dashPattern=roads$dashPattern,
+                      tdata[match(as.vector(roads$ROUTE),tdata$LINK_ID),])
     lastCaptureTime<-max(unique(tdata$CAPTURE_DATE))
     lastCaptureTime<-strftime(lastCaptureTime,format="%H:%M, %d %b %Y")
     leaflet(data=roads) %>%
@@ -118,7 +119,7 @@ plotCurrentTraffic<-function(trafficURL="http://resource.data.one.gov.hk/td/spee
       addProviderTiles(providers$Stamen.Toner, group = "Toner") %>%
       addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
       addPolylines(color=~pal(ROAD_SATURATION_LEVEL),dashArray=~dashPattern,
-                   popup=~paste0("average speed: ",TRAFFIC_SPEED, " km/h"), label = ~route) %>%
+                   popup=~paste0("average speed: ",TRAFFIC_SPEED, " km/h"), label = ~ROUTE) %>%
       addLegend(position="bottomright", pal = pal,
                 values = ~ROAD_SATURATION_LEVEL, title = paste0("Road Saturation Level at ",lastCaptureTime),
                 labels=~ROAD_SATURATION_LEVEL) %>%
@@ -133,8 +134,37 @@ plotCurrentTraffic()
 
 Note that the time stamp is the latest time.
 
-##4.(Optional) Download from github
+##4.(Optional) ~~Download from github~~
 
-If you need the above functions for whatever reasons, you may just install this package hktraffic from my github.
-`devtools::install_github("bmkor/hktraffic")`
+~~If you need the above functions for whatever reasons, you may just install this package hktraffic from my github.~~
+~~`devtools::install_github("bmkor/hktraffic")`~~
 
+Outdated. I'll update this little package later...
+
+##5. ESRI
+
+Found esri [collabarated](http://opendata.esrichina.hk/datasets/) with HK goverenment and happy to see that they got a set of road polylines for the [TD traffic map](http://opendata.esrichina.hk/datasets/td-speedmap). 
+
+So, let's try to plot those lines on the map.
+
+First, we create a handy function to load esri data
+````{r get roads from esri, message = FALSE, warning = FALSE}
+getRoadsFromESRI<-function(esriURL = "https://opendata.arcgis.com/datasets/91b65a5464d9403687be340146a18f2a_0.geojson"){
+  require(geojsonio,quietly = T)
+  tmp<-geojson_read(esriURL, what="sp")
+  names(tmp)[names(tmp) == "LINK_ID"] <- "ROUTE"
+  names(tmp)[names(tmp) == "ROAD_TYPE"] <- "ROUTE_TYPE"
+  tmp<-subset(tmp, !is.na(ROUTE_TYPE)) # some roads with NA route type
+  tmp
+}
+````
+
+Then, we plot out the lines...
+````{r plot current traffic with polylines from esri, echo=TRUE, message = FALSE, warning = FALSE}
+plotCurrentTraffic(roads=getRoadsFromESRI())
+````
+Please zoom in to see how the polylines are roads.
+
+Interesting that the some polylines (e.g. Island Eastern Corridor:877-46498 ) are not on the roads. This is because esri used HERE map whereas we are using OpenStreetMap. 
+
+Unfortunately, HERE map requires subscription and I'm not going to subscribe it. Perhaps I can try to remap those polylines onto the roads of the OpenStreetMap later...
