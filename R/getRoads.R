@@ -1,4 +1,4 @@
-getRoads<-function(specURL="http://theme.gov.hk/en/theme/psi/datasets/tsm_dataspec.pdf"){
+getRoads<-function(specURL="http://static.data.gov.hk/td/traffic-speed-map/en/tsm_dataspec.pdf"){
   tmp<-tempfile()
   roadMetaData<-specURL
   download.file(roadMetaData,dest=tmp,quiet =T)
